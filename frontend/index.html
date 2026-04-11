@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ticket Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Outfit',sans-serif; background:#0c0e14; color:#e2e8f0; min-height:100vh; }
+:root { --bg:#0c0e14; --card:#151921; --border:#1e2433; --border-hover:#334155; --muted:#64748b; --accent:linear-gradient(135deg,#6366f1,#7c3aed); }
+.mono { font-family:'JetBrains Mono',monospace; }
+
+/* Header */
+.header { padding:16px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.logo { display:flex; align-items:center; gap:8px; }
+.logo-icon { width:28px; height:28px; border-radius:6px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:14px; }
+.logo span { font-weight:700; font-size:18px; letter-spacing:-0.02em; }
+.logo small { font-size:11px; color:var(--muted); margin-left:4px; }
+.view-toggle { display:flex; gap:4px; background:#151921; border-radius:8px; padding:3px; }
+.view-toggle button { padding:5px 14px; border-radius:6px; border:none; background:transparent; color:var(--muted); cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; transition:all .15s; }
+.view-toggle button.active { background:#252b3b; color:#e2e8f0; }
+select.filter { padding:6px 10px; border-radius:6px; border:1px solid #252b3b; background:#151921; color:#94a3b8; font-size:13px; font-family:inherit; cursor:pointer; }
+.btn-add { margin-left:auto; padding:7px 16px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-weight:600; font-size:13px; cursor:pointer; font-family:inherit; }
+
+/* Board */
+.board { display:flex; gap:10px; padding:16px 20px; overflow-x:auto; min-height:calc(100vh - 70px); }
+.column { flex:1 0 200px; max-width:300px; display:flex; flex-direction:column; gap:8px; }
+.col-header { display:flex; align-items:center; gap:8px; padding:4px 0; margin-bottom:4px; }
+.col-dot { width:10px; height:10px; border-radius:50%; }
+.col-label { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#94a3b8; }
+.col-count { font-size:11px; color:#475569; }
+.col-body { display:flex; flex-direction:column; gap:6px; flex:1; min-height:60px; border-radius:8px; transition:background .15s; padding:4px; }
+.col-body.drag-over { background:rgba(99,102,241,0.08); }
+
+/* Card */
+.card { background:var(--card); border-radius:10px; padding:12px 14px; cursor:pointer; border:1px solid var(--border); transition:all .15s; }
+.card:hover { border-color:var(--border-hover); transform:translateY(-1px); }
+.card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.card-key { font-size:11px; color:var(--muted); }
+.card-pri { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:600; text-transform:uppercase; }
+.card-title { font-size:13px; font-weight:500; line-height:1.4; color:#cbd5e1; }
+.card-desc { font-size:11px; color:#475569; margin-top:6px; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.card-meta { display:flex; gap:8px; margin-top:8px; align-items:center; }
+.card-project { font-size:10px; padding:2px 6px; border-radius:4px; background:#1e2433; color:var(--muted); }
+
+/* List */
+.list-view { padding:16px 24px; max-width:900px; margin:0 auto; }
+.list-view table { width:100%; border-collapse:collapse; font-size:13px; }
+.list-view th { text-align:left; padding:8px 12px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; }
+.list-view td { padding:10px 12px; }
+.list-view tr { border-top:1px solid var(--border); cursor:pointer; transition:background .1s; }
+.list-view tr:hover { background:#151921; }
+.status-badge { padding:3px 8px; border-radius:5px; font-size:11px; font-weight:500; }
+
+/* Modal */
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); display:flex; justify-content:center; align-items:flex-start; padding-top:60px; z-index:999; backdrop-filter:blur(4px); }
+.modal { background:#151921; border-radius:14px; width:95%; max-width:520px; max-height:80vh; overflow:auto; border:1px solid #252b3b; padding:24px; }
+.modal-header { display:flex; justify-content:space-between; margin-bottom:20px; }
+.modal-header span { font-weight:700; font-size:16px; }
+.modal-header button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; }
+.form-group { margin-bottom:14px; }
+.form-group label { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; display:block; }
+.form-group input, .form-group textarea, .form-group select { width:100%; padding:8px 12px; border-radius:8px; border:1px solid #252b3b; background:var(--bg); color:#e2e8f0; font-size:13px; font-family:inherit; }
+.form-group textarea { resize:vertical; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.modal-footer { display:flex; justify-content:space-between; margin-top:20px; gap:8px; }
+.btn-del { padding:8px 16px; border-radius:8px; border:1px solid rgba(239,68,68,.2); background:transparent; color:#ef4444; cursor:pointer; font-size:13px; font-family:inherit; }
+.btn-cancel { padding:8px 16px; border-radius:8px; border:1px solid #252b3b; background:transparent; color:#94a3b8; cursor:pointer; font-size:13px; font-family:inherit; }
+.btn-save { padding:8px 20px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; font-size:13px; font-family:inherit; }
+.comment { padding:6px 10px; background:var(--bg); border-radius:6px; font-size:12px; margin-bottom:4px; }
+.comment-date { color:#475569; font-size:10px; }
+.comment-text { margin-top:2px; color:#94a3b8; }
+.comment-input { display:flex; gap:6px; }
+.comment-input input { flex:1; }
+.comment-input button { padding:8px 14px; border-radius:8px; border:none; background:#252b3b; color:#94a3b8; cursor:pointer; font-size:12px; font-family:inherit; }
+.empty { text-align:center; padding:40px; color:#475569; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const API = window.location.origin + '/api';
+const STATUSES = ['backlog','todo','in_progress','review','done','blocked'];
+const STATUS_LABELS = {backlog:'Backlog',todo:'To Do',in_progress:'In Progress',review:'Review',done:'Done',blocked:'Blocked'};
+const STATUS_COLORS = {backlog:'#6b7280',todo:'#3b82f6',in_progress:'#f59e0b',review:'#8b5cf6',done:'#10b981',blocked:'#ef4444'};
+const PRI_COLORS = {low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',critical:'#ef4444'};
+
+let state = { tickets:[], projects:[], view:'board', filter:'all', modal:null, dragId:null };
+
+async function api(path, opts={}) {
+  const r = await fetch(API+path, { headers:{'Content-Type':'application/json'}, ...opts });
+  return r.json();
+}
+
+async function load() {
+  state.tickets = await api('/tickets');
+  state.projects = await api('/projects');
+  render();
+}
+
+async function addTicket(data) {
+  await api('/tickets', { method:'POST', body:JSON.stringify(data) });
+  await load();
+}
+
+async function updateTicket(id, data) {
+  await api('/tickets/'+id, { method:'PUT', body:JSON.stringify(data) });
+  await load();
+}
+
+async function deleteTicket(id) {
+  await api('/tickets/'+id, { method:'DELETE' });
+  await load();
+}
+
+async function addComment(ticketId, text) {
+  await api(`/tickets/${ticketId}/comments`, { method:'POST', body:JSON.stringify({text}) });
+}
+
+function filtered() {
+  if (state.filter === 'all') return state.tickets;
+  return state.tickets.filter(t => t.project === state.filter);
+}
+
+function render() {
+  const app = document.getElementById('app');
+  const tix = filtered();
+  const done = state.tickets.filter(t=>t.status==='done').length;
+  
+  app.innerHTML = `
+    <div class="header">
+      <div class="logo">
+        <div class="logo-icon">⚡</div>
+        <span>Tracker</span>
+        <small class="mono">${done}/${state.tickets.length}</small>
+      </div>
+      <div class="view-toggle">
+        <button class="${state.view==='board'?'active':''}" onclick="setState('view','board')">Board</button>
+        <button class="${state.view==='list'?'active':''}" onclick="setState('view','list')">List</button>
+      </div>
+      <select class="filter" onchange="setState('filter',this.value)">
+        <option value="all" ${state.filter==='all'?'selected':''}>All Projects</option>
+        ${state.projects.map(p=>`<option value="${p.name}" ${state.filter===p.name?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+      <button class="btn-add" onclick="openModal()">+ Ticket</button>
+    </div>
+    ${state.view === 'board' ? renderBoard(tix) : renderList(tix)}
+    ${state.modal !== undefined && state.modal !== null ? renderModal() : ''}
+  `;
+}
+
+function renderBoard(tix) {
+  return `<div class="board">${STATUSES.map(s => {
+    const col = tix.filter(t=>t.status===s);
+    return `<div class="column">
+      <div class="col-header">
+        <div class="col-dot" style="background:${STATUS_COLORS[s]}"></div>
+        <span class="col-label">${STATUS_LABELS[s]}</span>
+        <span class="col-count mono">${col.length}</span>
+      </div>
+      <div class="col-body" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="this.classList.remove('drag-over');dropCard('${s}')">
+        ${col.map(t => renderCard(t)).join('')}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function renderCard(t) {
+  return `<div class="card" draggable="true" ondragstart="state.dragId=${t.id}" onclick="openModal(${t.id})">
+    <div class="card-top">
+      <span class="card-key mono">${t.key}</span>
+      <span class="card-pri" style="background:${PRI_COLORS[t.priority]}22;color:${PRI_COLORS[t.priority]}">${t.priority}</span>
+    </div>
+    <div class="card-title">${esc(t.title)}</div>
+    ${t.description ? `<div class="card-desc">${esc(t.description)}</div>` : ''}
+    <div class="card-meta">
+      <span class="card-project">${esc(t.project)}</span>
+      ${t.comments?.length ? `<span style="font-size:10px;color:#475569">💬 ${t.comments.length}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderList(tix) {
+  if (!tix.length) return '<div class="empty">No tickets yet</div>';
+  return `<div class="list-view"><table>
+    <thead><tr><th>Key</th><th>Title</th><th>Status</th><th>Priority</th><th>Project</th></tr></thead>
+    <tbody>${tix.map(t=>`<tr onclick="openModal(${t.id})">
+      <td class="mono" style="font-size:11px;color:var(--muted)">${t.key}</td>
+      <td style="font-weight:500">${esc(t.title)}</td>
+      <td><span class="status-badge" style="background:${STATUS_COLORS[t.status]}22;color:${STATUS_COLORS[t.status]}">${STATUS_LABELS[t.status]}</span></td>
+      <td style="color:${PRI_COLORS[t.priority]};font-size:12px">${t.priority}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(t.project)}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function renderModal() {
+  const t = state.modal;
+  const isEdit = t && t.id;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span>${isEdit ? 'Edit '+t.key : 'New Ticket'}</span>
+        <button onclick="closeModal()">✕</button>
+      </div>
+      <div class="form-group"><label>Title</label><input id="f-title" value="${esc(t?.title||'')}" placeholder="Ticket title..."></div>
+      <div class="form-group"><label>Description</label><textarea id="f-desc" rows="3" placeholder="Description...">${esc(t?.description||'')}</textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Project</label><input id="f-project" value="${esc(t?.project||'')}" placeholder="Project name" list="proj-list">
+          <datalist id="proj-list">${state.projects.map(p=>`<option value="${p.name}">`).join('')}</datalist>
+        </div>
+        <div class="form-group"><label>Priority</label><select id="f-pri">
+          ${['low','medium','high','critical'].map(p=>`<option value="${p}" ${(t?.priority||'medium')===p?'selected':''}>${p}</option>`).join('')}
+        </select></div>
+      </div>
+      ${isEdit ? `<div class="form-group"><label>Status</label><select id="f-status">
+        ${STATUSES.map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${STATUS_LABELS[s]}</option>`).join('')}
+      </select></div>` : ''}
+      <div class="form-group"><label>Assignee</label><input id="f-assignee" value="${esc(t?.assignee||'')}" placeholder="Assignee..."></div>
+      ${isEdit ? `<div class="form-group"><label>Comments</label>
+        ${(t.comments||[]).map(c=>`<div class="comment"><span class="comment-date mono">${c.date?.slice(0,16)||''}</span><div class="comment-text">${esc(c.text)}</div></div>`).join('')}
+        <div class="comment-input"><input id="f-comment" placeholder="Add comment..." onkeydown="if(event.key==='Enter')submitComment(${t.id})"><button onclick="submitComment(${t.id})">Add</button></div>
+      </div>` : ''}
+      <div class="modal-footer">
+        ${isEdit ? `<button class="btn-del" onclick="delTicket(${t.id})">Delete</button>` : '<div></div>'}
+        <div style="display:flex;gap:8px">
+          <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+          <button class="btn-save" onclick="saveTicket(${isEdit?t.id:'null'})">${isEdit?'Update':'Create'}</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function esc(s) { if(!s)return''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function setState(k,v) { state[k]=v; render(); }
+function openModal(id) { state.modal = id ? state.tickets.find(t=>t.id===id)||{} : {}; render(); }
+function closeModal() { state.modal=null; render(); }
+
+async function saveTicket(id) {
+  const data = {
+    title: document.getElementById('f-title').value,
+    description: document.getElementById('f-desc').value,
+    project: document.getElementById('f-project').value,
+    priority: document.getElementById('f-pri').value,
+    assignee: document.getElementById('f-assignee').value,
+  };
+  const statusEl = document.getElementById('f-status');
+  if (statusEl) data.status = statusEl.value;
+  if (!data.title || !data.project) return alert('Title and project required');
+  if (id) await updateTicket(id, data);
+  else await addTicket(data);
+  closeModal();
+}
+
+async function delTicket(id) { if(confirm('Delete?')){ await deleteTicket(id); closeModal(); } }
+async function submitComment(id) {
+  const el = document.getElementById('f-comment');
+  const text = el.value.trim();
+  if (!text) return;
+  await addComment(id, text);
+  const updated = await api('/tickets/' + id);
+  const idx = state.tickets.findIndex(t => t.id === id);
+  if (idx !== -1) state.tickets[idx] = updated;
+  state.modal = updated;
+  render();
+}
+function dropCard(status) { if(state.dragId){ updateTicket(state.dragId,{status}); state.dragId=null; } }
+
+load();
+</script>
+</body>
+</html>
