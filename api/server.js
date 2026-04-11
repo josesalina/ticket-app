@@ -31,10 +31,10 @@ app.get('/api/projects', async (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { name } = req.body;
+  const { name, path: projPath } = req.body;
   const prefix = name.toUpperCase().slice(0, 4);
   try {
-    const { rows } = await pool.query('INSERT INTO projects (name, prefix) VALUES ($1, $2) RETURNING *', [name, prefix]);
+    const { rows } = await pool.query('INSERT INTO projects (name, prefix, path) VALUES ($1, $2, $3) RETURNING *', [name, prefix, projPath || '']);
     res.json(rows[0]);
   } catch (e) {
     if (e.code === '23505') {
@@ -42,6 +42,15 @@ app.post('/api/projects', async (req, res) => {
       res.json(rows[0]);
     } else { res.status(500).json({ error: e.message }); }
   }
+});
+
+app.put('/api/projects/:id', async (req, res) => {
+  const { path: projPath } = req.body;
+  try {
+    const { rows } = await pool.query('UPDATE projects SET path = $1 WHERE id = $2 RETURNING *', [projPath || '', req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Tickets
@@ -73,7 +82,7 @@ app.get('/api/tickets/:id', async (req, res) => {
 });
 
 app.post('/api/tickets', async (req, res) => {
-  const { project, title, description, priority, assignee } = req.body;
+  const { project, title, description, priority, assignee, project_path } = req.body;
   // Ensure project exists
   let projRow;
   const existing = await pool.query('SELECT * FROM projects WHERE name = $1', [project]);
@@ -81,7 +90,7 @@ app.post('/api/tickets', async (req, res) => {
     projRow = existing.rows[0];
   } else {
     const prefix = project.toUpperCase().slice(0, 4);
-    const created = await pool.query('INSERT INTO projects (name, prefix) VALUES ($1, $2) RETURNING *', [project, prefix]);
+    const created = await pool.query('INSERT INTO projects (name, prefix, path) VALUES ($1, $2, $3) RETURNING *', [project, prefix, project_path || '']);
     projRow = created.rows[0];
   }
   // Get next ticket number for this project

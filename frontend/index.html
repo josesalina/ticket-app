@@ -209,12 +209,16 @@ function renderModal() {
       <div class="form-group"><label>Title</label><input id="f-title" value="${esc(t?.title||'')}" placeholder="Ticket title..."></div>
       <div class="form-group"><label>Description</label><textarea id="f-desc" rows="3" placeholder="Description...">${esc(t?.description||'')}</textarea></div>
       <div class="form-row">
-        <div class="form-group"><label>Project</label><input id="f-project" value="${esc(t?.project||'')}" placeholder="Project name" list="proj-list">
+        <div class="form-group"><label>Project</label><input id="f-project" value="${esc(t?.project||'')}" placeholder="Project name" list="proj-list" oninput="onProjectInput(this.value)">
           <datalist id="proj-list">${state.projects.map(p=>`<option value="${p.name}">`).join('')}</datalist>
         </div>
         <div class="form-group"><label>Priority</label><select id="f-pri">
           ${['low','medium','high','critical'].map(p=>`<option value="${p}" ${(t?.priority||'medium')===p?'selected':''}>${p}</option>`).join('')}
         </select></div>
+      </div>
+      <div class="form-group" id="project-path-group">
+        <label>Project Path</label>
+        <input id="f-project-path" value="${esc((() => { const p = state.projects.find(pr => pr.name === (t?.project||'')); return p?.path||''; })())}" placeholder="/Users/you/projects/my-app">
       </div>
       ${isEdit ? `<div class="form-group"><label>Status</label><select id="f-status">
         ${STATUSES.map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${STATUS_LABELS[s]}</option>`).join('')}
@@ -241,19 +245,41 @@ function setState(k,v) { state[k]=v; render(); }
 function openModal(id) { state.modal = id ? state.tickets.find(t=>t.id===id)||{} : {}; render(); }
 function closeModal() { state.modal=null; render(); }
 
+function onProjectInput(val) {
+  const proj = state.projects.find(p => p.name === val);
+  const pathEl = document.getElementById('f-project-path');
+  if (pathEl && proj) pathEl.value = proj.path || '';
+}
+
 async function saveTicket(id) {
+  const projectName = document.getElementById('f-project').value;
+  const projectPath = document.getElementById('f-project-path')?.value || '';
   const data = {
     title: document.getElementById('f-title').value,
     description: document.getElementById('f-desc').value,
-    project: document.getElementById('f-project').value,
+    project: projectName,
     priority: document.getElementById('f-pri').value,
     assignee: document.getElementById('f-assignee').value,
+    project_path: projectPath,
   };
   const statusEl = document.getElementById('f-status');
   if (statusEl) data.status = statusEl.value;
   if (!data.title || !data.project) return alert('Title and project required');
-  if (id) await updateTicket(id, data);
-  else await addTicket(data);
+  if (id) {
+    await updateTicket(id, data);
+    // Update path on existing project if changed
+    const proj = state.projects.find(p => p.name === projectName);
+    if (proj && proj.path !== projectPath) {
+      await api('/projects/' + proj.id, { method:'PUT', body:JSON.stringify({ path: projectPath }) });
+    }
+  } else {
+    await addTicket(data);
+    // If project already existed, update its path if provided
+    const proj = state.projects.find(p => p.name === projectName);
+    if (proj && projectPath && proj.path !== projectPath) {
+      await api('/projects/' + proj.id, { method:'PUT', body:JSON.stringify({ path: projectPath }) });
+    }
+  }
   closeModal();
 }
 

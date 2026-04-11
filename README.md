@@ -27,3 +27,9 @@ Abrí **http://localhost:3001** y listo.
 docker-compose down        # mantiene datos
 docker-compose down -v     # borra datos
 ```
+
+# Rebuild
+
+```bash
+docker compose up -d --build api
+```
