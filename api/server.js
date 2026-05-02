@@ -82,24 +82,41 @@ app.get('/api/tickets/:id', async (req, res) => {
 });
 
 app.post('/api/tickets', async (req, res) => {
-  const { project, title, description, priority, assignee, project_path } = req.body;
-  // Ensure project exists
+  const { project, project_id, title, description, priority, assignee, project_path, status } = req.body;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'title is required' });
+  }
+
+  // Resolve project: accept either project_id (number) or project (name string)
   let projRow;
-  const existing = await pool.query('SELECT * FROM projects WHERE name = $1', [project]);
-  if (existing.rows.length) {
-    projRow = existing.rows[0];
+  if (project_id != null) {
+    const found = await pool.query('SELECT * FROM projects WHERE id = $1', [project_id]);
+    if (!found.rows.length) {
+      return res.status(400).json({ error: `project_id ${project_id} not found` });
+    }
+    projRow = found.rows[0];
   } else {
-    const prefix = project.toUpperCase().slice(0, 4);
-    const created = await pool.query('INSERT INTO projects (name, prefix, path) VALUES ($1, $2, $3) RETURNING *', [project, prefix, project_path || '']);
-    projRow = created.rows[0];
+    if (typeof project !== 'string' || !project.trim()) {
+      return res.status(400).json({ error: 'project (name) or project_id is required' });
+    }
+    const projectName = project.trim();
+    const existing = await pool.query('SELECT * FROM projects WHERE name = $1', [projectName]);
+    if (existing.rows.length) {
+      projRow = existing.rows[0];
+    } else {
+      const prefix = projectName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'PROJ';
+      const created = await pool.query('INSERT INTO projects (name, prefix, path) VALUES ($1, $2, $3) RETURNING *', [projectName, prefix, project_path || '']);
+      projRow = created.rows[0];
+    }
   }
   // Get next ticket number for this project
   const countRes = await pool.query('SELECT COUNT(*) as cnt FROM tickets WHERE project_id = $1', [projRow.id]);
   const num = parseInt(countRes.rows[0].cnt) + 1;
   const key = `${projRow.prefix}-${num}`;
   const { rows } = await pool.query(
-    'INSERT INTO tickets (key, project_id, title, description, priority, assignee) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-    [key, projRow.id, title, description || '', priority || 'medium', assignee || '']
+    'INSERT INTO tickets (key, project_id, title, description, priority, assignee, status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+    [key, projRow.id, title, description || '', priority || 'medium', assignee || '', status || 'todo']
   );
   const ticket = { ...rows[0], project: projRow.name, comments: [], work_log: [] };
   res.json(ticket);
