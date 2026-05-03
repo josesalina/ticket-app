@@ -56,7 +56,7 @@ app.put('/api/projects/:id', async (req, res) => {
 // Tickets
 app.get('/api/tickets', async (req, res) => {
   const { project, status } = req.query;
-  let q = `SELECT t.*, p.name as project, p.prefix,
+  let q = `SELECT t.*, p.id as project_id, p.name as project, p.prefix,
     COALESCE((SELECT json_agg(json_build_object('id',c.id,'text',c.text,'date',c.created_at) ORDER BY c.created_at) FROM comments c WHERE c.ticket_id = t.id), '[]') as comments,
     COALESCE((SELECT json_agg(json_build_object('id',w.id,'hours',w.hours,'note',w.note,'date',w.created_at) ORDER BY w.created_at) FROM work_logs w WHERE w.ticket_id = t.id), '[]') as work_log
     FROM tickets t JOIN projects p ON t.project_id = p.id`;
@@ -71,7 +71,7 @@ app.get('/api/tickets', async (req, res) => {
 
 app.get('/api/tickets/:id', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT t.*, p.name as project, p.prefix,
+    SELECT t.*, p.id as project_id, p.name as project, p.prefix,
       COALESCE((SELECT json_agg(json_build_object('id',c.id,'text',c.text,'date',c.created_at) ORDER BY c.created_at) FROM comments c WHERE c.ticket_id = t.id), '[]') as comments,
       COALESCE((SELECT json_agg(json_build_object('id',w.id,'hours',w.hours,'note',w.note,'date',w.created_at) ORDER BY w.created_at) FROM work_logs w WHERE w.ticket_id = t.id), '[]') as work_log
     FROM tickets t JOIN projects p ON t.project_id = p.id
