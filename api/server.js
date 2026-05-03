@@ -53,6 +53,15 @@ app.put('/api/projects/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Resolves ticket numeric id from either a numeric id or a key like "PROJ-1"
+async function resolveTicketId(param) {
+  if (/^[A-Za-z]+-\d+$/.test(param)) {
+    const { rows } = await pool.query('SELECT id FROM tickets WHERE key = $1', [param.toUpperCase()]);
+    return rows.length ? rows[0].id : null;
+  }
+  return parseInt(param, 10) || null;
+}
+
 // Tickets
 app.get('/api/tickets', async (req, res) => {
   const { project, status } = req.query;
@@ -70,13 +79,15 @@ app.get('/api/tickets', async (req, res) => {
 });
 
 app.get('/api/tickets/:id', async (req, res) => {
+  const ticketId = await resolveTicketId(req.params.id);
+  if (!ticketId) return res.status(404).json({ error: 'Not found' });
   const { rows } = await pool.query(`
     SELECT t.*, p.id as project_id, p.name as project, p.prefix,
       COALESCE((SELECT json_agg(json_build_object('id',c.id,'text',c.text,'date',c.created_at) ORDER BY c.created_at) FROM comments c WHERE c.ticket_id = t.id), '[]') as comments,
       COALESCE((SELECT json_agg(json_build_object('id',w.id,'hours',w.hours,'note',w.note,'date',w.created_at) ORDER BY w.created_at) FROM work_logs w WHERE w.ticket_id = t.id), '[]') as work_log
     FROM tickets t JOIN projects p ON t.project_id = p.id
     WHERE t.id = $1
-  `, [req.params.id]);
+  `, [ticketId]);
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
 });
@@ -110,9 +121,12 @@ app.post('/api/tickets', async (req, res) => {
       projRow = created.rows[0];
     }
   }
-  // Get next ticket number for this project
-  const countRes = await pool.query('SELECT COUNT(*) as cnt FROM tickets WHERE project_id = $1', [projRow.id]);
-  const num = parseInt(countRes.rows[0].cnt) + 1;
+  // Get next ticket number for this project (MAX avoids gaps from deletions)
+  const countRes = await pool.query(
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(key, '-', 2) AS INTEGER)), 0) as max_num FROM tickets WHERE project_id = $1`,
+    [projRow.id]
+  );
+  const num = parseInt(countRes.rows[0].max_num) + 1;
   const key = `${projRow.prefix}-${num}`;
   const { rows } = await pool.query(
     'INSERT INTO tickets (key, project_id, title, description, priority, assignee, status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
@@ -123,7 +137,8 @@ app.post('/api/tickets', async (req, res) => {
 });
 
 app.put('/api/tickets/:id', async (req, res) => {
-  const { id } = req.params;
+  const ticketId = await resolveTicketId(req.params.id);
+  if (!ticketId) return res.status(404).json({ error: 'Not found' });
   const fields = req.body;
   const sets = [], params = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -134,27 +149,33 @@ app.put('/api/tickets/:id', async (req, res) => {
   }
   if (!sets.length) return res.status(400).json({ error: 'No valid fields' });
   sets.push('updated_at = NOW()');
-  params.push(id);
+  params.push(ticketId);
   const { rows } = await pool.query(`UPDATE tickets SET ${sets.join(',')} WHERE id = $${params.length} RETURNING *`, params);
   res.json(rows[0]);
 });
 
 app.delete('/api/tickets/:id', async (req, res) => {
-  await pool.query('DELETE FROM tickets WHERE id = $1', [req.params.id]);
+  const ticketId = await resolveTicketId(req.params.id);
+  if (!ticketId) return res.status(404).json({ error: 'Not found' });
+  await pool.query('DELETE FROM tickets WHERE id = $1', [ticketId]);
   res.json({ ok: true });
 });
 
 // Comments
 app.post('/api/tickets/:id/comments', async (req, res) => {
+  const ticketId = await resolveTicketId(req.params.id);
+  if (!ticketId) return res.status(404).json({ error: 'Not found' });
   const { text } = req.body;
-  const { rows } = await pool.query('INSERT INTO comments (ticket_id, text) VALUES ($1, $2) RETURNING *', [req.params.id, text]);
+  const { rows } = await pool.query('INSERT INTO comments (ticket_id, text) VALUES ($1, $2) RETURNING *', [ticketId, text]);
   res.json(rows[0]);
 });
 
 // Work logs
 app.post('/api/tickets/:id/log', async (req, res) => {
+  const ticketId = await resolveTicketId(req.params.id);
+  if (!ticketId) return res.status(404).json({ error: 'Not found' });
   const { hours, note } = req.body;
-  const { rows } = await pool.query('INSERT INTO work_logs (ticket_id, hours, note) VALUES ($1, $2, $3) RETURNING *', [req.params.id, hours, note]);
+  const { rows } = await pool.query('INSERT INTO work_logs (ticket_id, hours, note) VALUES ($1, $2, $3) RETURNING *', [ticketId, hours, note]);
   res.json(rows[0]);
 });
 
